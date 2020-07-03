@@ -1,10 +1,5 @@
 #import "KakaoCordovaSDK.h"
 #import <Cordova/CDVPlugin.h>
-#import <objc/runtime.h>
-
-@interface KakaoCordovaSDK ()
-@property (copy)   NSString* callbackId;
-@end
 
 @implementation KakaoCordovaSDK
     
@@ -14,7 +9,17 @@
     
 - (void)pluginInitialize {
     NSLog(@"Start KaKao plugin");
-    
+#if __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_9_0
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(openURL:)
+                                                 name:CDVPluginHandleOpenURLNotification object:nil];
+#endif
+#if __IPHONE_OS_VERSION_MAX_ALLOWED < __IPHONE_9_0
+    // Add notification listener for handleOpenURL
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(openURL:)
+                                                 name:CDVPluginHandleOpenURLWithAppSourceAndAnnotationNotification object:nil];
+#endif
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(applicationDidBecomeActive)
                                                  name:UIApplicationDidBecomeActiveNotification object:nil];
@@ -1006,78 +1011,29 @@
     [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
 }
     
+- (void)openURL:(NSNotification *)notification {
+    NSLog(@"handle url1: %@", [notification object]);
+    NSURL *url = [notification object];
+    
+    if (![url isKindOfClass:[NSURL class]]) {
+        return;
+    }
+    if ([KOSession isKakaoAccountLoginCallback:url]){
+        [KOSession handleOpenURL:url];
+    }
+    
+    if ([[KLKTalkLinkCenter sharedCenter] isTalkLinkCallback:url]) {
+        NSString *params = url.query;
+        NSLog(@"%@", params);
+    }
+}
+    
 - (void)applicationDidBecomeActive {
     [KOSession handleDidBecomeActive];
 }
     
-@end
+    @end
 
 
-#pragma mark - AppDelegate Overrides
-
-@implementation AppDelegate (KakaoCordovaSDK)
-
-void KMethodSwizzle(Class c, SEL originalSelector) {
-    NSString *selectorString = NSStringFromSelector(originalSelector);
-    SEL newSelector = NSSelectorFromString([@"swizzled_kakao_" stringByAppendingString:selectorString]);
-    SEL noopSelector = NSSelectorFromString([@"noop_kakao_" stringByAppendingString:selectorString]);
-    Method originalMethod, newMethod, noop;
-    originalMethod = class_getInstanceMethod(c, originalSelector);
-    newMethod = class_getInstanceMethod(c, newSelector);
-    noop = class_getInstanceMethod(c, noopSelector);
-    if (class_addMethod(c, originalSelector, method_getImplementation(newMethod), method_getTypeEncoding(newMethod))) {
-        class_replaceMethod(c, newSelector, method_getImplementation(originalMethod) ?: method_getImplementation(noop), method_getTypeEncoding(originalMethod));
-    } else {
-        method_exchangeImplementations(originalMethod, newMethod);
-    }
-}
-
-+ (void)load
-{
-    KMethodSwizzle([self class], @selector(application:openURL:sourceApplication:annotation:));
-}
-
-// This method is a duplicate of the other openURL method below, except using the newer iOS (9) API.
-- (BOOL)application:(UIApplication *)application openURL:(NSURL *)url options:(NSDictionary<NSString *,id> *)options {
-    if (!url) {
-        return NO;
-    }
-    if ([KOSession isKakaoAccountLoginCallback:url]){
-        [KOSession handleOpenURL:url];
-    }
-    
-    if ([[KLKTalkLinkCenter sharedCenter] isTalkLinkCallback:url]) {
-        NSString *params = url.query;
-        NSLog(@"%@", params);
-    }
-    NSLog(@"Kakao(ori) handle url: %@", url);
 
 
-    // Call existing method
-    return [self swizzled_kakao_application:application openURL:url sourceApplication:[options valueForKey:@"UIApplicationOpenURLOptionsSourceApplicationKey"] annotation:0x0];
-}
-
-- (BOOL)noop_kakao_application:(UIApplication *)application openURL:(NSURL *)url sourceApplication:(NSString *)sourceApplication annotation:(id)annotation
-{
-    return NO;
-}
-
-- (BOOL)swizzled_kakao_application:(UIApplication *)application openURL:(NSURL *)url sourceApplication:(NSString *)sourceApplication annotation:(id)annotation
-{
-    if (!url) {
-        return NO;
-    }
-    if ([KOSession isKakaoAccountLoginCallback:url]){
-        [KOSession handleOpenURL:url];
-    }
-    
-    if ([[KLKTalkLinkCenter sharedCenter] isTalkLinkCallback:url]) {
-        NSString *params = url.query;
-        NSLog(@"%@", params);
-    }
-    NSLog(@"Kakao(swizzle) handle url: %@", url);
-    
-    // Call existing method
-    return [self swizzled_kakao_application:application openURL:url sourceApplication:sourceApplication annotation:annotation];
-}
-@end
