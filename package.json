@@ -12,7 +12,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/raccoondev85/cordova-plugin-kakao-sdk.git"
+    "url": "git+https://github.com/bdhwan/cordova-plugin-kakao-sdk.git"
   },
   "keywords": [
     "cordova",
@@ -25,6 +25,6 @@
     "cordova-android",
     "cordova-ios"
   ],
-  "author": "raccoondev85",
+  "author": "bdhwan",
   "license": "MIT"
 }
